@@ -86,6 +86,7 @@ namespace fsher::ir {
         StageModule buildStage(Stage stage, FnDeclNode const* entry, StageRegistry const& stages, bool autoVaryings) {
             StageModule mod;
             mod.stage = stage;
+            m_currentStage = stage;
 
             if (stage == Stage::Vertex) {
                 for (auto const& [name, symbol] : m_symbols.symbols()) {
@@ -97,6 +98,12 @@ namespace fsher::ir {
                         mod.inputs.push_back(std::move(v));
                     }
                 }
+
+                GlobalVar posOut;
+                posOut.name = "_vtxPos";
+                posOut.type = Type::Vector(ScalarKind::Float32, 4);
+                posOut.semantic = Semantic::Position;
+                mod.outputs.push_back(std::move(posOut));
 
                 auto varyings = this->getUsedVaryings(stages.lookup(Stage::Fragment));
                 for (auto* var : varyings) {
@@ -136,6 +143,7 @@ namespace fsher::ir {
         StageModule synthesiseVertexStage(StageRegistry const& stages) {
             StageModule mod;
             mod.stage = Stage::Vertex;
+            m_currentStage = Stage::Vertex;
 
             std::string_view posName = stages.positionInput();
             if (posName.empty()) {
@@ -713,9 +721,12 @@ namespace fsher::ir {
             auto* symbol = m_symbols.find(name);
             if (!symbol) return std::string(name);
             switch (symbol->kind) {
-                case Symbol::Kind::In:
-                case Symbol::Kind::Out: return fmt::format("v_{}", name);
                 default: return std::string(name);
+                case Symbol::Kind::Out: return fmt::format("v_{}", name);
+                case Symbol::Kind::In:
+                    return m_currentStage == Stage::Fragment
+                        ? fmt::format("v_{}", name)
+                        : fmt::format("a_{}", name);
             }
         }
 
@@ -965,7 +976,7 @@ namespace fsher::ir {
             walkWithFuncs(frag->body(), [&](Node const* n) {
                 if (n->type() == Node::Type::IdentifierExpr) {
                     auto* symbol = m_symbols.find(static_cast<IdentifierExprNode const*>(n)->name());
-                    if (symbol && symbol->kind == Symbol::Kind::In) seen.insert(symbol);
+                    if (symbol && (symbol->kind == Symbol::Kind::In || symbol->kind == Symbol::Kind::Out)) seen.insert(symbol);
                 }
             });
 
@@ -1179,6 +1190,7 @@ namespace fsher::ir {
         SymbolTable const& m_symbols;
         StructRegistry const& m_structs;
         size_t m_tempVarCounter = 0;
+        Stage m_currentStage = Stage::Vertex;
         std::vector<std::unordered_set<std::string>> m_localScopes;
     };
 }
