@@ -212,7 +212,12 @@ namespace fsher::backend {
                     fmt::format_to(inserter, " {} ", tokenTypeToOperator(s.op));
                     writeChild(*s.rhs, true);
                 } else if constexpr (std::is_same_v<T, ir::FieldAccess>) {
+                    bool parenthesize = std::holds_alternative<ir::Binary>(s.target->node)
+                        || std::holds_alternative<ir::Ternary>(s.target->node)
+                        || std::holds_alternative<ir::Unary>(s.target->node);
+                    if (parenthesize) fmt::format_to(inserter, "(");
                     writeExpression(inserter, *s.target);
+                    if (parenthesize) fmt::format_to(inserter, ")");
                     fmt::format_to(inserter, ".{}", s.field);
                 } else if constexpr (std::is_same_v<T, ir::IndexAccess>) {
                     writeExpression(inserter, *s.target);
